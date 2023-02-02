@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="UTF-8">
+	<title>Quick Math</title>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+	<link rel="stylesheet" href="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/themes/smoothness/jquery-ui.css">
+	<script src="https://ajax.googleapis.com/ajax/libs/jqueryui/1.12.1/jquery-ui.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.1.3/jszip.min.js"></script>
+	<link rel="stylesheet" href="https://cdn.datatables.net/1.10.19/css/jquery.dataTables.min.css">
+	<link rel="stylesheet" href="https://cdn.datatables.net/buttons/1.5.6/css/buttons.dataTables.min.css">
+	<link rel="stylesheet" href="https://cdn.datatables.net/select/1.3.0/css/select.dataTables.min.css">
+	<script src="https://cdn.datatables.net/1.10.19/js/jquery.dataTables.min.js"></script>
+	<script src="https://cdn.datatables.net/buttons/1.5.6/js/dataTables.buttons.min.js"></script>
+	<script src="https://cdn.datatables.net/buttons/1.5.6/js/buttons.html5.min.js"></script>
+	<script src="https://cdn.datatables.net/select/1.3.0/js/dataTables.select.min.js"></script>
+
+<style>
+body {
+	background-color: #FFD8DF;
+	padding-bottom: 50px;
+	font-family: "Verdana", "Arial", "Helvetica", "sans-serif";
+	font-size: 14pt;
+	text-decoration: none;
+	color: #202020;
+	text-align: center;
+}
+#msgDiv {
+	padding-bottom: 20px;
+}
+#message {
+	color: #00A010;
+}
+.correct {
+	color: #00A010;
+}
+.wrong {
+	color: #A00010;
+}
+#resultDiv {
+	display: none;
+	margin: 0 auto;
+	width: 580px;
+	padding-bottom: 20px;
+}
+#resultDiv > label, #resultDiv > span {
+	display: inline-block;
+	float: left;
+}
+#resultDiv > label {
+	clear: left;
+	width: 240px;
+	text-align: right;
+	margin-right: 8px;
+}
+.frac {
+	display: inline-block;
+	position: relative;
+	vertical-align: middle;
+	letter-spacing: 0.001em;
+	text-align: center;
+}
+.frac > span {
+	display: block;
+	padding: 0.1em;
+}
+.frac > span.bottom {
+	border-top: thin solid black;
+}
+.frac > span.symbol {
+	display: none;
+}
+</style>
+
+<script>
+var sampleQ = {
+	idx: 0,
+	idxDisp: '1.',
+	question: '91/7',
+	isFracQ: false,
+	ans: '16',
+	remainder: '0',
+	modelAns: 13,
+	modelRemainder: 0,
+	startTime: 1566454012177,
+	elapsedTime: 3445,
+	result: false
+};
+var emptyQ = {
+	isFracQ: false,
+	ans: '',
+	result: '',
+	elapsedTime: -1
+};
+
+var quizStarted = false;
+var quizEnded = false;
+var totalQuestions = 0;
+var quizStartTime;
+var quizEndTime;
+
+var quizTable = null;
+
+function showMessage(msg) {
+	$("#message").text(msg);
+}
+
+function showFrac(whole, numerator, denominator) {
+	return whole + '<div class="frac"><span class="top">' + numerator + '</span><span class="symbol">/</span><span class="bottom">' + denominator + '</span></div>';
+}
+
+function createQplus() {
+	var a = Math.floor(Math.random() * 95) + 5;
+	var b = Math.floor(Math.random() * 95) + 5;
+	var ret = Object.assign({}, emptyQ);
+	ret.question = a + "+" + b;
+	ret.modelAns = (a + b);
+	return ret;
+}
+
+function createQminus() {
+	var a = Math.floor(Math.random() * 89) + 11;
+	var b = Math.floor(Math.random() * (a-3)) + 2;
+	var ret = Object.assign({}, emptyQ);
+	ret.question = a + "-" + b;
+	ret.modelAns = (a - b);
+	return ret;
+}
+
+function createQmultiply() {
+	var a = Math.floor(Math.random() * 98) + 2;
+	var b = Math.floor(Math.random() * 8) + 2;
+	var ret = Object.assign({}, emptyQ);
+	ret.question = a + "x" + b;
+	ret.modelAns = (a * b);
+	return ret;
+}
+
+function createQdivide() {
+	var b = Math.ceil(Math.random() * 8) + 2;
+	var a = Math.floor(Math.random() * 100) * b;
+	var ret = Object.assign({}, emptyQ);
+	ret.question = a + "/" + b;
+	ret.modelAns = (a / b);
+	return ret;
+}
+
+function createIntegerQuestion() {
+	var type = Math.floor(Math.random() * 4);
+	if (type == 0)
+		return createQplus();
+	else if (type == 1)
+		return createQminus();
+	else if (type == 2)
+		return createQmultiply();
+	else
+		return createQdivide();
+}
+
+function createDecimalQplus() {
+	var a = Math.floor(Math.random() * 95) + 5;
+	var b = Math.floor(Math.random() * 95) + 5;
+	var dpa = Math.floor(Math.random() * 4);
+	if (a % 10 != 0) {
+		a = a / Math.pow(10, dpa);
+	}
+	var dpb = Math.floor(Math.random() * 4);
+	if (b % 10 != 0) {
+		b = b / Math.pow(10, dpb);
+	}
+	var ret = Object.assign({}, emptyQ);
+	ret.question = a + "+" + b;
+	ret.modelAns = (a + b);
+	if ((dpa+dpb) > 0) {
+		ret.modelAns = +ret.modelAns.toFixed(dpa+dpb);
+	}
+	else {
+		ret.modelAns = Math.round(ret.modelAns);
+	}
+	return ret;
+}
+
+function createDecimalQminus() {
+	var dpa = Math.floor(Math.random() * 4);
+	var a = (Math.floor(Math.random() * 989 * Math.pow(10, dpa)) + 11.0) / Math.pow(10, dpa);
+	var dpb = Math.floor(Math.random() * 4);
+	var b = (Math.floor(Math.random() * (a-3) * Math.pow(10, dpb)) + 2.0) / Math.pow(10, dpb);
+	var ret = Object.assign({}, emptyQ);
+	ret.question = a + "-" + b;
+	ret.modelAns = (a - b);
+	if ((dpa+dpb) > 0) {
+		ret.modelAns = +ret.modelAns.toFixed(dpa+dpb);
+	}
+	else {
+		ret.modelAns = Math.round(ret.modelAns);
+	}
+	return ret;
+}
+
+function createDecimalQmultiply() {
+	var a = Math.floor(Math.random() * 98) + 2;
+	var b = Math.floor(Math.random() * 8) + 2;
+	var dpa = Math.floor(Math.random() * 4);
+	if (a % 10 != 0) {
+		a = a / Math.pow(10, dpa);
+	}
+	var dpb = Math.floor(Math.random() * 4);
+	if (b % 10 != 0) {
+		b = b / Math.pow(10, dpb);
+	}
+	var ret = Object.assign({}, emptyQ);
+	ret.question = a + "x" + b;
+	ret.modelAns = (a * b);
+	if ((dpa+dpb) > 0) {
+		ret.modelAns = +ret.modelAns.toFixed(dpa+dpb);
+	}
+	else {
+		ret.modelAns = Math.round(ret.modelAns);
+	}
+	return ret;
+}
+
+function createDecimalQdivide() {
+	var b = Math.floor(Math.random() * 98) + 2;
+	var r = Math.floor(Math.random() * 98) + 2;
+	var dpb = Math.floor(Math.random() * 4);
+	if (b % 10 != 0) {
+		b = b / Math.pow(10, dpb);
+	}
+	var dpr = Math.floor(Math.random() * 4);
+	if (r % 10 != 0) {
+		r = r / Math.pow(10, dpr);
+	}
+	var a = (b * r);
+	if ((dpb+dpr) > 0) {
+		a = +a.toFixed(dpb+dpr);
+	}
+	else {
+		a = Math.round(a);
+	}
+	var ret = Object.assign({}, emptyQ);
+	ret.question = a + "/" + b;
+	ret.modelAns = r;
+	return ret;
+}
+
+function createDecimalQuestion() {
+	var type = Math.floor(Math.random() * 3);
+	if (type == 0)
+		return createDecimalQplus();
+	else if (type == 1)
+		return createDecimalQminus();
+	else// if (type == 2)
+		return createDecimalQmultiply();
+//	else
+//		return createDecimalQdivide();
+}
+
+function createQFracPlusMinus() {
+	var ret = Object.assign({}, emptyQ);
+	ret.isFracQ = true;
+	var parenthesis = (Math.random() > 0.5);
+	var sign1;
+	
+	ret.question = showFrac(15, 11, 18) + " " + "-" + " " + showFrac(2, 3, 4) + " " + "+" + " " + showFrac(3, 5, 12);
+	ret.modelAns = 1;
+	return ret;
+}
+
+function createTTQmultiply() {
+	var a = Math.floor(Math.random() * 10);
+	var b = Math.floor(Math.random() * 10);
+	var ret = Object.assign({}, emptyQ);
+	ret.question = a + "x" + b;
+	ret.modelAns = (a * b);
+	return ret;
+}
+
+function createTTQdivide() {
+	var a = Math.floor(Math.random() * 9) + 1;
+	var b = Math.floor(Math.random() * 9) + 1;
+	var r = a * b;
+	var ret = Object.assign({}, emptyQ);
+	ret.question = r + "/" + a;
+	ret.modelAns = b;
+	return ret;
+}
+
+function createTimesTableQuestion() {
+	var type = Math.floor(Math.random() * 2);
+	if (type == 0)
+		return createTTQmultiply();
+	else
+		return createTTQdivide();
+}
+
+function createQuestion() {
+	return createTimesTableQuestion();
+//	return createQFracPlusMinus();
+//	return createDecimalQuestion();
+//	return createIntegerQuestion();
+//	return Object.assign({}, sampleQ);
+}
+
+function showNextQ() {
+	var thisIdx = quizTable.data().count();
+	var q = createQuestion();
+	q.idx = thisIdx;
+	q.idxDisp = (thisIdx+1) + ".";
+	q.startTime = new Date();
+	var rowNode = quizTable.row.add(q).draw().node();
+//Show answer:	$(rowNode).find(".ansInput").val(q.modelAns);
+//quizTable.row.add(q);
+//quizTable.rows().invalidate().draw();
+	$(rowNode).find(".ansInput").on("keydown", function(e) {
+		if (e.keyCode == 13) {
+			onAnswer(this);
+		}
+	}).focus();
+}
+
+function onAnswer(inputElement) {
+	var ans = $(inputElement).val().trim();
+	if (!isFinite(ans)) {
+		$(inputElement).select();
+		return;
+	}
+	var ansTime = new Date();
+	$(inputElement).attr('disabled', true);
+	var idx = $(inputElement).data("idx");
+	var data = quizTable.row(idx).data();
+	data.ans = ans;
+	data.result = (ans == data.modelAns)
+	data.elapsedTime = (ansTime - data.startTime) / 1000;
+	if (quizTable.data().count() < totalQuestions)
+		showNextQ();
+	else
+		showQuizResult();
+}
+
+function startQuiz() {
+	if (quizStarted)
+		return;
+	var n = parseInt($("#numQuestions").val().trim(), 10);
+	if (isNaN(n) || n <= 0) {
+		showMessage("Please enter a valid number of questions for the quiz.");
+		$("#numQuestions").select();
+		return;
+	}
+	totalQuestions = n;
+	$("#initDiv").hide();
+	$('#quizTbl').parents('div.dataTables_wrapper').first().show();
+	showNextQ();
+	quizStarted = true;
+	quizStartTime = new Date();
+	showMessage("The quiz has started at " + quizStartTime.toLocaleString('en-GB'));
+}
+
+function myRound(number, decimals) { return +(Math.round(number + "e+" + decimals) + "e-" + decimals); }
+
+function showQuizResult() {
+	quizEndTime = new Date();
+	quizEnded = true;
+	quizTable.columns().visible(true);
+	quizTable.rows().invalidate().draw();
+	$("#quizDateSpan").text(quizStartTime.toLocaleDateString('en-GB'));
+	$("#startTimeSpan").text(quizStartTime.toLocaleTimeString('en-US'));
+	$("#endTimeSpan").text(quizEndTime.toLocaleTimeString('en-US'));
+	let numQ = quizTable.data().count();
+	$("#numQuestionsSpan").text(numQ);
+	let diffTime = quizEndTime - quizStartTime;
+	let minutes = Math.floor(diffTime / 60000);
+	let seconds = (diffTime % 60000) / 1000;
+	$("#totalTimeUsedSpan").text(minutes + " mins " + seconds + " secs");
+	diffTime = diffTime / numQ;
+	minutes = Math.floor(diffTime / 60000);
+	seconds = (diffTime % 60000) / 1000;
+	$("#avgTimeUsedSpan").text(minutes + " mins " + myRound(seconds, 3) + " secs");
+	$("#correctSpan").text(quizTable.data().filter(function(data, index) {
+		return data.result === true;
+	}).count());
+	$("#wrongSpan").text(quizTable.data().filter(function(data, index) {
+		return data.result === false;
+	}).count());
+	let score = myRound(100 * $("#correctSpan").text() / numQ, 3);
+	$("#scoreSpan").text(score + " / 100");
+	if (score < 80)
+		$("#scoreSpan").addClass("wrong");
+	else
+		$("#scoreSpan").addClass("correct");
+	$("#resultDiv").show();
+	$("#msgDiv").hide();
+	window.scrollTo(0, 0);
+}
+
+$(document).ready(function() {
+	$("#numQuestions").keydown(function (e) {
+		if (e.keyCode == 13)
+			startQuiz();
+	});
+	$("#startQuizBtn").click(function () {
+		startQuiz();
+	});
+	quizTable = $("#quizTbl").DataTable( {
+		dom: "Bfrti",
+		buttons: [ {extend: 'csv', text: 'Save'} ],
+		data: [],
+		columns: [
+			{ data: "idxDisp", className: 'dt-body-right' },
+			{ data: null, className: 'dt-nowrap', render: function ( data, type, row, meta ) {
+				return data.question + '=';
+			} },
+			{ data: null, className: 'dt-left', width: '100%', render: function ( data, type, row, meta ) {
+				if (quizEnded)
+					return data.ans;
+				else {
+					var ret = '<input id="ans' + data.idx + '" class="ansInput" type="text" data-idx="' + data.idx + '" value="' + data.ans + '" size="10" maxlength="10" ';
+					if (data.idx == quizTable.data().count() - 1)
+						return ret + '/>';
+					else
+						return ret + ' disabled="disabled"/>';
+				}
+			} },
+			{ data: null, visible: false, render: function ( data, type, row, meta ) {
+				if (data.result === true)
+					return '<span class="correct">Correct</span>';
+				else if (data.result === false)
+					return '<span class="wrong">Wrong</span>';
+				else
+					return data.result;
+			} },
+//			{ data: null, visible: false, render: function ( data, type, row, meta ) {
+//				if (data.result === false) return '<input id="correction' + data.idx + '" type="text" data-idx="' + data.idx + '" value="" size="10" maxlength="10"/>';
+//				return '';
+//			} },
+			{ data: "modelAns", className: 'dt-body-right', visible: false },
+			{ data: "elapsedTime", visible: false },
+		],
+		paging: false,
+		select: true,
+		ordering: true,
+		language: {
+			"emptyTable": "Questions will be shown here after you start the quiz."
+		},
+	});
+	$('#quizTbl').parents('div.dataTables_wrapper').first().hide();
+	$("#numQuestions").select();
+} );
+</script>
+
+</head>
+
+<body>
+
+<h1>Quick Math</h1>
+<div id="msgDiv">
+<span id="message">Please enter the number of questions for this quiz.</span>
+</div>
+
+<div id="initDiv">
+Number of questions: <input id="numQuestions" type="text" value="50" size="10" maxlength="10"/> <button id="startQuizBtn">Start!</button>
+</div>
+
+<div id="resultDiv">
+<label>Date:</label><span id="quizDateSpan"></span>
+<label>Start Time:</label><span id="startTimeSpan"></span>
+<label>End Time:</label><span id="endTimeSpan"></span>
+<label>Total Time Used:</label><span id="totalTimeUsedSpan"></span>
+<label>Average Time Used:</label><span id="avgTimeUsedSpan"></span>
+<label>Number of Questions:</label><span id="numQuestionsSpan"></span>
+<label>Correct:</label><span id="correctSpan" class="correct"></span>
+<label>Wrong:</label><span id="wrongSpan" class="wrong"></span>
+<label>Score:</label><span id="scoreSpan"></span>
+</div>
+
+<div id="quizDiv">
+
+<table id="quizTbl" class="display">
+<thead><tr><th>Q</th><th>Question</th><th>Answer</th><th>Result</th>
+<!--th>Correction</th-->
+<th>Model Ans</th><th>Time Used</th></tr></thead>
+</table>
+
+</div>
+
+</body>
+</html>
+
+
